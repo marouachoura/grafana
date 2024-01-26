@@ -1,0 +1,94 @@
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+  external_labels:
+    scraped_by: prometheus
+
+scrape_configs:
+# from tempo promtheus.yaml
+  - job_name: prometheus
+    static_configs:
+    - targets:
+      - localhost:9090
+
+  - job_name: cadvisor
+    static_configs:
+    - targets:
+      - cadvisor:8080
+
+  - job_name: tempo
+    static_configs:
+    - targets:
+      - distributor:3200
+      - ingester-0:3200
+      - ingester-1:3200
+      - ingester-2:3200
+# from otel promtheus.yaml
+  - job_name: 'otel-collector'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['otel-collector:8889']
+      - targets: ['otel-collector:8888']
+  - job_name: 'prometheus'
+    static_configs:
+      - targets:
+          - 'prometheus:9090'
+  - job_name: 'loki'
+    dns_sd_configs:
+      - names:
+          - loki-read
+          - loki-write
+          - loki-backend
+        type: A
+        port: 3100
+  - job_name: 'promtail'
+    dns_sd_configs:
+      - names:
+          - promtail
+        type: A
+        port: 9080
+  - job_name: mimir-microservices
+    static_configs:
+      - targets:
+          - 'distributor-1:8000'
+          - 'distributor-2:8001'
+          - 'ingester-1:8002'
+          - 'ingester-2:8003'
+          - 'ingester-3:8004'
+          - 'querier:8005'
+          - 'ruler-1:8021'
+          - 'ruler-2:8022'
+          - 'compactor:8006'
+          - 'query-frontend:8007'
+          - 'store-gateway-1:8008'
+          - 'store-gateway-2:8009'
+          - 'query-scheduler:8011'
+          - 'memcached-exporter:9150'
+          - 'load-generator:9900'
+        labels:
+          cluster: 'docker-compose'
+          namespace: 'mimir-microservices-mode'
+    relabel_configs:
+      - source_labels: ['__address__']
+        target_label: 'pod'
+        regex: '([^:]+)(:[0-9]+)?'
+        replacement: '${1}'
+      - source_labels: ['namespace', 'pod']
+        target_label: 'job'
+        separator: '/'
+        regex: '(.+?)(-\d+)?'
+        replacement: '${1}'
+      - source_labels: ['pod']
+        target_label: 'container'
+        regex: '(.+?)(-\d+)?'
+        replacement: '${1}'
+    scrape_classic_histograms: true
+
+remote_write:
+  - url: http://distributor-1:8000/api/v1/push
+    send_native_histograms: true
+    send_exemplars: true
+
+rule_files:
+  - '/etc/mixin/mimir-alerts.yaml'
+  - '/etc/mixin/mimir-rules.yaml'
